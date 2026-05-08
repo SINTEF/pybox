@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Any, Dict, Callable, Awaitable
+from typing import Any, Dict, Callable
 from .config import QueueConfig
 
 logger = logging.getLogger("pybox.async_queue")

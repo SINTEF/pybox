@@ -2,10 +2,20 @@ import json
 import subprocess
 import uuid
 import logging
-from typing import Any, Dict
+import traceback
+from typing import Any, Dict, Optional
+
 from .config import SandboxConfig
 
+
 logger = logging.getLogger("pybox.executor")
+
+
+class RunError(Exception):
+    """Error running code."""
+    def __init__(self, *args):
+        self.__dict__.update(args[0])
+
 
 class SandboxExecutor:
     def __init__(self, config: SandboxConfig | None = None):
@@ -16,7 +26,7 @@ class SandboxExecutor:
         name = f"pybox-{uuid.uuid4()}"
 
         cmd = [
-            "docker", "run", "--rm",
+            "docker", "run", "--rm", "-i",
             "--name", name,
             "--pids-limit", str(cfg.pids_limit),
             "--cpus", str(cfg.cpus),
@@ -24,19 +34,29 @@ class SandboxExecutor:
             "--memory-swap", cfg.memory,
             "--cap-drop", "ALL",
             "--security-opt", "no-new-privileges",
-            "--tmpfs", f"/tmp:rw,noexec,nosuid,size={cfg.tmpfs_size}",
-            "--tmpfs", f"/sandbox:rw,noexec,nosuid,size={cfg.tmpfs_size}",
+            "--tmpfs", f"/tmp:ro,noexec,nosuid,size={cfg.tmpfs_size}",
         ]
 
         if cfg.read_only_root:
             cmd.append("--read-only")
         if cfg.network_disabled:
             cmd += ["--network", "none"]
+        if cfg.userns:
+            cmd += ["--userns", cfg.userns]
+        if cfg.apparmor_profile:
+            cmd += ["--security-opt", f"apparmor={cfg.apparmor_profile}"]
+        if cfg.seccomp_profile:
+            cmd += ["--security-opt", f"seccomp={cfg.seccomp_profile}"]
 
         cmd.append(cfg.image)
         return cmd
 
-    def run(self, code: str, input_obj: Dict[str, Any]) -> Dict[str, Any]:
+    def run(
+        self,
+        code: str,
+        input: "Optional[Dict[str, Any]]" = None,
+    ) -> "Dict[str, Any]":
+        input_obj = input if input else {}
         payload = json.dumps({"code": code, "input": input_obj})
         cmd = self._docker_cmd()
 
@@ -50,22 +70,42 @@ class SandboxExecutor:
         )
 
         try:
-            stdout, stderr = proc.communicate(payload, timeout=self.config.timeout_sec)
+            stdout, stderr = proc.communicate(
+                payload, timeout=self.config.timeout_sec
+            )
         except subprocess.TimeoutExpired:
             logger.warning("Sandbox execution timed out")
             proc.kill()
             return {
                 "status": "timeout",
-                "stdout": "",
-                "stderr": "Execution timed out",
-                "exit_code": None,
+                "result": None,
+                "errmsg": "Execution timed out",
+                "returncode": None,
             }
 
         status = "ok" if proc.returncode == 0 else "error"
         logger.info("Sandbox finished with status %s", status)
+
+        result = json.loads(stdout).get("result") if stdout else None
         return {
             "status": status,
-            "stdout": stdout,
-            "stderr": stderr,
-            "exit_code": proc.returncode,
+            "result": result,
+            "errmsg": stderr,
+            "returncode": proc.returncode,
         }
+
+
+def run(
+    code: str,
+    input: "Optional[Dict[str, Any]]" = None,
+    config: "Optional[Dict[str, Any]]" = None,
+) -> "Any":
+    """Convenient runction for running untrusted code.
+    """
+    c = config if config else {}
+    cfg = SandboxConfig(**c)
+    executor = SandboxExecutor(cfg)
+    payload = executor.run(code, input)
+    if payload["status"] == "ok":
+        return payload["result"]
+    raise RunError(payload)

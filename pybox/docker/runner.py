@@ -3,42 +3,21 @@ import json
 import traceback
 
 def main():
+    stdin = sys.stdin.read()
     try:
-        payload = json.loads(sys.stdin.read())
+        payload = json.loads(stdin)
     except Exception as e:
-        print(f"Invalid input JSON: {e}", file=sys.stderr)
+        print(f"Invalid JSON input: {e}:\n{stdin!r}", file=sys.stderr)
         sys.exit(1)
 
     code = payload.get("code", "")
     user_input = payload.get("input", {})
 
-    globals_ns = {
-        "__builtins__": {
-            "print": print,
-            "range": range,
-            "len": len,
-            "int": int,
-            "float": float,
-            "str": str,
-            "bool": bool,
-            "dict": dict,
-            "list": list,
-            "set": set,
-            "tuple": tuple,
-            "min": min,
-            "max": max,
-            "sum": sum,
-            "abs": abs,
-            "sorted": sorted,
-            "enumerate": enumerate,
-            "zip": zip,
-        }
-    }
-    locals_ns = {"input_data": user_input, "result": None}
-
+    ns = user_input.copy()
+    ns["result"] = None
     try:
-        exec(code, globals_ns, locals_ns)
-        sys.stdout.write(json.dumps({"result": locals_ns["result"]}))
+        exec(code, None, ns)
+        sys.stdout.write(json.dumps({"result": ns["result"]}))
     except Exception:
         traceback.print_exc(file=sys.stderr)
         sys.exit(1)
