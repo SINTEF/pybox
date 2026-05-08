@@ -1,4 +1,4 @@
-name: Build and Push pybox Docker container
+name: CD build pybox docker container
 
 on:
   push:
@@ -39,7 +39,7 @@ jobs:
       - name: Build Docker image
         run: |
           OWNER=${{ github.repository_owner }}
-          owner="$(echo $OWNER | tr ' [:upper:]' '[:lower:]')"
+          owner="$(echo $OWNER | tr '[:upper:]' '[:lower:]')"
           IMAGE_TAG=ghcr.io/$owner/${{ env.IMAGE_NAME }}:latest
           docker build -t $IMAGE_TAG pybox/docker
           echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
