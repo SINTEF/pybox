@@ -2,8 +2,8 @@ from dataclasses import dataclass
 
 @dataclass
 class Config:
-    #image: str = "ghcr.io/SINTEF/pybox:latest"
-    image: str = "pybox:latest"
+    image: str = "ghcr.io/sintef/pybox:latest"
+    #image: str = "pybox:latest"
     cpus: float = 0.5
     memory: str = "128m"
     pids_limit: int = 64
