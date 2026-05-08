@@ -5,7 +5,7 @@ import logging
 import traceback
 from typing import Any, Dict, Optional
 
-from .config import SandboxConfig
+from .config import Config
 
 
 logger = logging.getLogger("pybox.executor")
@@ -17,9 +17,9 @@ class RunError(Exception):
         self.__dict__.update(args[0])
 
 
-class SandboxExecutor:
-    def __init__(self, config: SandboxConfig | None = None):
-        self.config = config or SandboxConfig()
+class Executor:
+    def __init__(self, config: Config | None = None):
+        self.config = config or Config()
 
     def _docker_cmd(self) -> list[str]:
         cfg = self.config
@@ -60,7 +60,7 @@ class SandboxExecutor:
         payload = json.dumps({"code": code, "input": input_obj})
         cmd = self._docker_cmd()
 
-        logger.info("Starting sandbox container")
+        logger.info("Starting pybox container")
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
@@ -71,10 +71,10 @@ class SandboxExecutor:
 
         try:
             stdout, stderr = proc.communicate(
-                payload, timeout=self.config.timeout_sec
+                payload, timeout=self.config.timeout
             )
         except subprocess.TimeoutExpired:
-            logger.warning("Sandbox execution timed out")
+            logger.warning("Pybox execution timed out")
             proc.kill()
             return {
                 "status": "timeout",
@@ -84,7 +84,7 @@ class SandboxExecutor:
             }
 
         status = "ok" if proc.returncode == 0 else "error"
-        logger.info("Sandbox finished with status %s", status)
+        logger.info("Pybox finished with status %s", status)
 
         result = json.loads(stdout).get("result") if stdout else None
         return {
@@ -103,8 +103,8 @@ def run(
     """Convenient runction for running untrusted code.
     """
     c = config if config else {}
-    cfg = SandboxConfig(**c)
-    executor = SandboxExecutor(cfg)
+    cfg = Config(**c)
+    executor = Executor(cfg)
     payload = executor.run(code, input)
     if payload["status"] == "ok":
         return payload["result"]

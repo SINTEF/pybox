@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 
 @dataclass
-class SandboxConfig:
+class Config:
     #image: str = "ghcr.io/SINTEF/pybox:latest"
     image: str = "pybox:latest"
     cpus: float = 0.5
     memory: str = "128m"
     pids_limit: int = 64
-    timeout_sec: float = 2.0
+    timeout: float = 2.0  # Timeout in seconds
     tmpfs_size: str = "64m"
     network_disabled: bool = True
     read_only_root: bool = True

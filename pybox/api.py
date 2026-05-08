@@ -4,15 +4,15 @@ from typing import Any, Dict
 import json
 import logging
 
-from .executor import SandboxExecutor
+from .executor import Executor
 from .async_queue import AsyncSandboxQueue
-from .config import SandboxConfig
+from .config import Config
 
 logger = logging.getLogger("pybox.api")
 
 app = FastAPI(title="pybox")
 
-executor = SandboxExecutor(SandboxConfig())
+executor = Executor(Config())
 queue = AsyncSandboxQueue()
 
 class RunRequest(BaseModel):

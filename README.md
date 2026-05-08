@@ -14,14 +14,13 @@ pip install -e .
 docker build -t pybox:latest pybox/docker/
 ```
 
-## Using Python interface
+## Running untrusted code from Python
 
 ```python
-import json
-from pybox.executor import SandboxExecutor, SandboxConfig
+from pybox import Executor, Config
 
-cfg = SandboxConfig(timeout_sec=3.0)
-executor = SandboxExecutor(cfg)
+cfg = Config(timeout=3.0)
+executor = Executor(cfg)
 
 code = "result = x + y"
 input = {"x": 2, "y": 3}
@@ -31,12 +30,26 @@ print(result)
 
 ```
 
+Pybox includes also a convenient run() function
+
+```python
+from pybox import RunError, run
+
+code = """
+import math
+result = math.hypot(x, y)
+"""
+input = {"x": 3, "y": 4}
+result = run(code, input, config={"timeout": 3.0})
+print(result)
+5.0
+
+```
 
 
+## Using the FastAPI service
 
-## Using the FastAPI interface
-
-Start the FastAPI service
+Start the service
 ```bash
 uvicorn pybox.api:app --reload
 ```

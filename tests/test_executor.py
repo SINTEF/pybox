@@ -2,7 +2,7 @@ import json
 import logging
 import pytest
 import textwrap
-from pybox.executor import SandboxExecutor, SandboxConfig
+from pybox.executor import Executor, Config
 from pybox.executor import RunError, run
 
 
@@ -15,8 +15,8 @@ logging.basicConfig(
 
 def test_simple_code():
     """Test simple code."""
-    cfg = SandboxConfig(timeout_sec=3.0)
-    executor = SandboxExecutor(cfg)
+    cfg = Config(timeout=3.0)
+    executor = Executor(cfg)
 
     code = "result = x + y"
     payload = executor.run(code, {"x": 2, "y": 3})
@@ -30,7 +30,7 @@ def test_simple_code():
 
 def test_code_with_statements():
     """Test code with import statement."""
-    executor = SandboxExecutor()
+    executor = Executor()
 
     code = textwrap.dedent(
         """
