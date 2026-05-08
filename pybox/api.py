@@ -36,7 +36,7 @@ async def run_code(req: RunRequest):
             errmsg=payload["errmsg"] or None,
         )
 
-    if result["status"] == "timeout":
+    if payload["status"] == "timeout":
         raise HTTPException(status_code=504, detail="Execution timed out")
 
     return RunResponse(
