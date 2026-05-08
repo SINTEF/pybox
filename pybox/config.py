@@ -7,7 +7,7 @@ class Config:
     cpus: float = 0.5
     memory: str = "128m"
     pids_limit: int = 64
-    timeout: float = 2.0  # Timeout in seconds
+    timeout: float = 5.0  # Timeout in seconds
     tmpfs_size: str = "64m"
     network_disabled: bool = True
     read_only_root: bool = True
