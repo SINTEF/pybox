@@ -11,8 +11,8 @@ from .config import Config
 logger = logging.getLogger("pybox.executor")
 
 
-class RunError(Exception):
-    """Error running code."""
+class ExecuteError(Exception):
+    """Error executing code."""
     def __init__(self, *args):
         self.__dict__.update(args[0])
 
@@ -95,7 +95,7 @@ class Executor:
         }
 
 
-def run(
+def execute(
     code: str,
     input: "Optional[Dict[str, Any]]" = None,
     config: "Optional[Dict[str, Any]]" = None,
@@ -108,4 +108,4 @@ def run(
     payload = executor.run(code, input)
     if payload["status"] == "ok":
         return payload["result"]
-    raise RunError(payload)
+    raise ExecuteError(payload)

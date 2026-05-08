@@ -1,6 +1,6 @@
 import logging
 
-from .executor import Executor, RunError, run
+from .executor import Executor, ExecuteError, execute
 from .config import Config
 
 
