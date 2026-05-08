@@ -1,0 +1,20 @@
+[project]
+name = "pybox"
+version = "0.1.0"
+description = "Secure Docker-based Python sandbox with JSON I/O, asyncio queue, and FastAPI API"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi",
+  "uvicorn",
+  "pydantic",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "httpx",
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
