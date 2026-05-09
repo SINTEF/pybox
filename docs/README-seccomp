@@ -1,0 +1,11 @@
+# Seccomp template
+
+The included seccomp template (seccomp-template.json):
+  - Blocks all syscalls except a small safe allowlist
+  - Allows Python to run, allocate memory, read/write files, and exit
+  - Blocks networking, mounting, ptrace, kernel modules, etc.
+
+
+Enable it with
+
+    docker run --security-opt seccomp=docs/seccomp-template.json ...

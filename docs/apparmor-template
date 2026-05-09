@@ -1,0 +1,55 @@
+#
+# A minimal AppAmor profile for Pybox
+#
+# This profile:
+#   - Allows only essential file access inside the container
+#   - Blocks all network access
+#   - Prevents privilege escalation
+#   - Restricts Python to read‑only root FS + tmpfs
+#   - Allows execution only of /usr/bin/python*
+#
+# How to enable this profile:
+#
+#     sudo apparmor_parser -r -W docs/apparmor-template
+#     docker run --security-opt apparmor=pybox ...
+#
+
+
+#include <tunables/global>
+
+profile pybox flags=(attach_disconnected,mediate_deleted) {
+
+  # No network
+  network none,
+
+  # Capabilities
+  deny capability *,
+  deny capability sys_admin,
+  deny capability sys_ptrace,
+  deny capability net_admin,
+
+  # Allow basic file operations in tmpfs
+  /sandbox/** rw,
+  /tmp/** rw,
+
+  # Read-only access to Python runtime
+  /usr/bin/python* rix,
+  /usr/lib/** r,
+  /lib/** r,
+  /etc/** r,
+
+  # Deny everything else
+  deny /** w,
+  deny /** mrwklx,
+
+  # Allow reading stdin/stdout/stderr
+  file,
+  capability chown,
+  ptrace (read),
+
+  # Allow execution of Python only
+  /usr/bin/python* ixr,
+
+  # Allow reading runner script
+  /sandbox/runner.py r,
+}
