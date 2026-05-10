@@ -17,4 +17,3 @@
 3. Output is returned as JSON via stdout
 
 ➡️ See [Getting Started](getting-started.md) for usage.
-``
