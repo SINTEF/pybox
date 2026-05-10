@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/SINTEF/pybox/master/docs/pybox-logo_name.svg" align="right" />
+
 <!--
 [![PyPi](https://img.shields.io/pypi/v/dlite-python.svg)](https://pypi.org/project/dlite-python/)
 -->
@@ -7,7 +9,7 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7811078.svg)](https://doi.org/10.5281/zenodo.7811078)
 -->
 
-![Pybox](docs/pybox-logo_name.svg)
+> A lightweight library to run untrusted Python code
 
 
 # pybox
