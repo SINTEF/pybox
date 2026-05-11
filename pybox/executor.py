@@ -79,6 +79,8 @@ class Executor:
             cmd += ["--userns", cfg.userns]
         if cfg.runtime:
             cmd += ["--runtime", cfg.runtime]
+        if cfg.runtime == "runsc" and self._have_selinux():
+            cmd += ["--security-opt", "label=disable"]
         if cfg.apparmor_profile:
             cmd += ["--security-opt", f"apparmor={cfg.apparmor_profile}"]
         if cfg.seccomp_profile:
@@ -86,6 +88,15 @@ class Executor:
 
         cmd.append(cfg.image)
         return cmd
+
+    @staticmethod
+    def _have_selinux():
+        """Returns true if SELinux is available and enforced."""
+        try:
+            output = subprocess.check_output(["getenforce"], text=True)
+        except:
+            return False
+        return output.strip() == "Enforcing"
 
     def run(
         self,
