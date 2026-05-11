@@ -76,6 +76,14 @@ class Config(BaseModel):
         },
     )
 
+    runtime: Optional[str] = Field(
+        default=None,
+        json_schema_extra={
+            "description": "Runtime to use for this container.",
+            "example": "runsc",
+        },
+    )
+
     apparmor_profile: str = Field(
         default="docker-default",
         json_schema_extra={

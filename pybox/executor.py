@@ -77,6 +77,8 @@ class Executor:
             cmd += ["--network", "none"]
         if cfg.userns:
             cmd += ["--userns", cfg.userns]
+        if cfg.runtime:
+            cmd += ["--runtime", cfg.runtime]
         if cfg.apparmor_profile:
             cmd += ["--security-opt", f"apparmor={cfg.apparmor_profile}"]
         if cfg.seccomp_profile:
@@ -132,6 +134,7 @@ class Executor:
         except subprocess.TimeoutExpired:
             logger.warning("Pybox execution timed out")
             proc.kill()
+            proc.wait()  # for better timeout handling
             return {
                 "status": "timeout",
                 "result": None,
@@ -142,11 +145,16 @@ class Executor:
         status = "ok" if proc.returncode == 0 else "error"
         logger.info("Pybox finished with status %s", status)
 
-        result = json.loads(stdout).get("result") if stdout else None
+        try:
+            result = json.loads(stdout).get("result") if stdout else None
+        except json.JSONDecodeError:
+            result = None
+            stderr += "\nInvalid JSON output"
+
         return {
             "status": status,
             "result": result,
-            "errmsg": stderr,
+            "errmsg": stderr.strip() or None,
             "returncode": proc.returncode,
         }
 

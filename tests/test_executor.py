@@ -19,13 +19,13 @@ def test_simple_code():
     executor = Executor(cfg)
 
     code = "result = x + y"
-    payload = executor.run(code, {"x": 2, "y": 3})
-    print(payload.get("errmsg"))
+    status = executor.run(code, {"x": 2, "y": 3})
+    print(status.get("errmsg"))
 
-    assert payload["status"] == "ok"
-    assert payload["result"] == 5
-    assert payload["errmsg"] == ""
-    assert payload["returncode"] == 0
+    assert status["status"] == "ok"
+    assert status["result"] == 5
+    assert status["errmsg"] is None
+    assert status["returncode"] == 0
 
 
 def test_code_with_statements():
@@ -40,11 +40,11 @@ def test_code_with_statements():
             result = math.hypot(x, y)
         """
     )
-    payload = executor.run(code, {"x": 3, "y": 4})
-    assert payload["result"] == 5
+    status = executor.run(code, {"x": 3, "y": 4})
+    assert status["result"] == 5.0
 
-    payload = executor.run(code, {"x": 4, "y": 3})
-    assert payload["result"] is None
+    status = executor.run(code, {"x": 4, "y": 3})
+    assert status["result"] is None
 
 
 def test_execute():
