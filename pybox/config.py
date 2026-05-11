@@ -4,10 +4,18 @@ from typing import Optional
 
 class Config(BaseModel):
     image: str = Field(
-        default="ghcr.io/sintef/pybox:latest",
+        default="pybox:latest",
+        #default="ghcr.io/sintef/pybox:latest",
         json_schema_extra={
             "description": "Container image used to execute workloads.",
             "example": "ghcr.io/sintef/pybox:latest",
+        },
+    )
+
+    fast_mode: bool = Field(
+        default=False,
+        json_schema_extra={
+            "description": "Whether to enable the fast mode.",
         },
     )
 

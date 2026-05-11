@@ -12,7 +12,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 
-
 def test_simple_code():
     """Test simple code."""
     cfg = Config(timeout=3.0)
@@ -63,3 +62,19 @@ def test_execute():
         #print(exc.errmsg)
     else:
         assert False  # never reached
+
+
+def test_fast_mode():
+    """Test fast mode."""
+    cfg = Config(timeout=5.0, fast_mode=True)
+
+    executor = Executor(cfg)
+
+    code = "result = x - y"
+    status = executor.run(code, {"x": 2, "y": 3})
+    print(status.get("errmsg"))
+
+    assert status["status"] == "ok"
+    assert status["result"] == -1
+    assert status["errmsg"] is None
+    assert status["returncode"] == 0

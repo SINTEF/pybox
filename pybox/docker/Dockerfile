@@ -7,5 +7,5 @@ WORKDIR /sandbox
 
 COPY runner.py /sandbox/runner.py
 
-ENTRYPOINT ["python", "runner.py"]
-
+#CMD ["python", "-u", "runner.py"]
+ENTRYPOINT ["python", "-u", "runner.py"]

@@ -1,93 +1,75 @@
 import json
-import subprocess
-import uuid
 import logging
-import traceback
+import shlex
+import subprocess
+import time
+import uuid
 from typing import Any, Dict, Optional
 
 from .config import Config
 
-
 logger = logging.getLogger("pybox.executor")
 
 
+# ============================================================
+# Errors
+# ============================================================
+
 class ExecuteError(Exception):
-    """Exception raised when execution of code inside the container fails.
+    def __init__(self, payload: Dict[str, Any]):
+        self.__dict__.update(payload)
 
-    The exception is initialized with a dictionary payload returned from the
-    execution engine. The payload is unpacked into the exception's __dict__,
-    making fields like `status`, `errmsg`, and `returncode` directly accessible.
 
-    Args:
-        *args: Expected to contain a single dictionary with execution metadata.
-    """
-
-    def __init__(self, *args):
-        self.__dict__.update(args[0])
-
+# ============================================================
+# Executor
+# ============================================================
 
 class Executor:
-    """Docker-based executor for running untrusted Python code safely.
+    """Secure Docker-based executor with optional fast mode."""
 
-    This class wraps execution of code inside an isolated Docker container
-    configured with strict security and resource limits.
-
-    Args:
-        config: Optional configuration object defining container limits and
-            security settings. If not provided, a default `Config` is used.
-    """
-
-    def __init__(self, config: Config | None = None):
-        """Initializes the executor with a given configuration.
-
-        Args:
-            config: Optional `Config` instance. Defaults to a new `Config`
-                with default values.
-        """
+    def __init__(self, config: Optional[Config] = None):
         self.config = config or Config()
+        self._container_name = None
 
-    def _docker_cmd(self) -> list[str]:
-        """Construct the Docker command used to run the container.
+    # ========================================================
+    # Docker command builders
+    # ========================================================
 
-        The command includes resource constraints (CPU, memory), security
-        restrictions (no new privileges, dropped capabilities), and filesystem
-        isolation (read-only root, tmpfs).
-
-        Returns:
-            list[str]: The full Docker command as a list of CLI arguments.
-        """
+    def _base_security_flags(self) -> list[str]:
         cfg = self.config
-        name = f"pybox-{uuid.uuid4()}"
 
-        cmd = [
-            "docker", "run", "--rm", "-i",
-            "--name", name,
+        flags = [
+            "--cap-drop", "ALL",
+            "--security-opt", "no-new-privileges",
             "--pids-limit", str(cfg.pids_limit),
             "--cpus", str(cfg.cpus),
             "--memory", cfg.memory,
             "--memory-swap", cfg.memory,
-            "--cap-drop", "ALL",
-            "--security-opt", "no-new-privileges",
             "--tmpfs", f"/tmp:ro,noexec,nosuid,size={cfg.tmpfs_size}",
         ]
 
         if cfg.read_only_root:
-            cmd.append("--read-only")
-        if cfg.network_disabled:
-            cmd += ["--network", "none"]
-        if cfg.userns:
-            cmd += ["--userns", cfg.userns]
-        if cfg.runtime:
-            cmd += ["--runtime", cfg.runtime]
-        if cfg.runtime == "runsc" and self._have_selinux():
-            cmd += ["--security-opt", "label=disable"]
-        if cfg.apparmor_profile:
-            cmd += ["--security-opt", f"apparmor={cfg.apparmor_profile}"]
-        if cfg.seccomp_profile:
-            cmd += ["--security-opt", f"seccomp={cfg.seccomp_profile}"]
+            flags.append("--read-only")
 
-        cmd.append(cfg.image)
-        return cmd
+        if cfg.network_disabled:
+            flags += ["--network", "none"]
+
+        if cfg.userns:
+            flags += ["--userns", cfg.userns]
+
+        if cfg.apparmor_profile:
+            flags += ["--security-opt", f"apparmor={cfg.apparmor_profile}"]
+
+        if cfg.seccomp_profile:
+            flags += ["--security-opt", f"seccomp={cfg.seccomp_profile}"]
+
+        # gVisor runtime
+        if cfg.runtime:
+            flags += ["--runtime", cfg.runtime]
+        if cfg.runtime == "runsc" and self._have_selinux():
+            flags += ["--security-opt", "label=disable"]
+
+        return flags
 
     @staticmethod
     def _have_selinux():
@@ -98,38 +80,110 @@ class Executor:
             return False
         return output.strip() == "Enforcing"
 
+    def _docker_run_cmd(self) -> list[str]:
+        """Safe mode: one container per execution."""
+        print("*** run")
+        return [
+            "docker", "run", "--rm", "-i",
+            *_self_named_container(self),
+            *self._base_security_flags(),
+            self.config.image,
+        ]
+
+    def _start_fast_container(self):
+        """Start long-lived container for fast mode."""
+        if self._container_name:
+            return
+
+        name = f"pybox-fast-{uuid.uuid4()}"
+        self._container_name = name
+
+        cmd = [
+            "docker", "run", "-d",
+            "--name", name,
+            *self._base_security_flags(),
+            "--entrypoint", "sleep",  # override entrypoint
+            self.config.image,
+            "infinity",
+        ]
+
+        subprocess.run(cmd, check=True)
+        logger.info("Started fast container %s", name)
+
+    def _inspect_entrypoint(self) -> str:
+        """Return the entrypoint (or cmd) in the image."""
+        def inspect(conf):
+            cmd = [
+                "docker", "inspect", "-f",
+                conf,
+                self.config.image,
+            ]
+            return subprocess.check_output(cmd).decode().strip().strip("[]")
+        entrypoint = inspect("{{.Config.Entrypoint}}")
+        if not entrypoint:
+            entrypoint = inspect("{{.Config.Cmd}}")
+        if not entrypoint:
+            raise ValueError(
+                f"No Entrypoint or Cmd in Docker image: {self.config.image}"
+            )
+        return shlex.split(entrypoint)
+
+
+    def _docker_exec_cmd(self) -> list[str]:
+        """Exec command for fast mode."""
+        cmd = [
+            "docker", "exec",
+            "-i",
+            self._container_name,
+        ] + self._inspect_entrypoint()
+        return cmd
+
+
+    # ========================================================
+    # Resource stats
+    # ========================================================
+
+    def _get_stats(self) -> Dict[str, Any]:
+        """Fetch container resource usage (fast mode only)."""
+        if not self._container_name:
+            return {}
+
+        try:
+            proc = subprocess.run(
+                ["docker", "stats", self._container_name, "--no-stream", "--format", "{{json .}}"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            return json.loads(proc.stdout.strip())
+        except Exception:
+            return {}
+
+    # ========================================================
+    # Execution
+    # ========================================================
+
     def run(
         self,
         code: str,
-        input: "Optional[Dict[str, Any]]" = None,
-    ) -> "Dict[str, Any]":
-        """Execute Python code inside an isolated Docker container.
+        input: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
 
-        The code and input are serialized into JSON and passed via stdin to
-        the container. The container is expected to return a JSON response
-        on stdout.
+        payload = json.dumps({
+            "code": code,
+            "input": input or {},
+        })
 
-        Args:
-            code: Python code to execute inside the container.
-            input: Optional dictionary of input data made available to the
-                executed code.
+        start = time.time()
 
-        Returns:
-            Dict[str, Any]: A dictionary containing execution results with keys:
-                - "status": Execution status ("ok", "error", or "timeout").
-                - "result": The returned result from the executed code (if any).
-                - "errmsg": Standard error output from the container.
-                - "returncode": Process return code from the container.
+        if self.config.fast_mode:
+            self._start_fast_container()
+            cmd = self._docker_exec_cmd()
+        else:
+            cmd = self._docker_run_cmd()
 
-        Notes:
-            - If execution exceeds the configured timeout, the container is killed.
-            - The container must output valid JSON to stdout for result parsing.
-        """
-        input_obj = input if input else {}
-        payload = json.dumps({"code": code, "input": input_obj})
-        cmd = self._docker_cmd()
+        logger.info("Executing code (fast_mode=%s)", self.config.fast_mode)
 
-        logger.info("Starting pybox container")
         proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE,
@@ -140,64 +194,97 @@ class Executor:
 
         try:
             stdout, stderr = proc.communicate(
-                payload, timeout=self.config.timeout
+                payload,
+                timeout=self.config.timeout
             )
         except subprocess.TimeoutExpired:
-            logger.warning("Pybox execution timed out")
             proc.kill()
-            proc.wait()  # for better timeout handling
-            return {
+            proc.wait()
+
+            duration = time.time() - start
+
+            return self._log_result({
                 "status": "timeout",
                 "result": None,
                 "errmsg": "Execution timed out",
                 "returncode": None,
-            }
+                "duration": duration,
+            })
+
+        duration = time.time() - start
 
         status = "ok" if proc.returncode == 0 else "error"
-        logger.info("Pybox finished with status %s", status)
 
         try:
             result = json.loads(stdout).get("result") if stdout else None
-        except json.JSONDecodeError:
+        except Exception:
             result = None
             stderr += "\nInvalid JSON output"
 
-        return {
+        payload = {
             "status": status,
             "result": result,
             "errmsg": stderr.strip() or None,
             "returncode": proc.returncode,
+            "duration": duration,
         }
 
+        # Add resource stats in fast mode
+        if self.config.fast_mode:
+            payload["resources"] = self._get_stats()
+
+        return self._log_result(payload)
+
+    # ========================================================
+    # Logging
+    # ========================================================
+
+    def _log_result(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Emit structured log."""
+        logger.info(
+            "pybox.execution",
+            extra={"execution": payload},
+        )
+        return payload
+
+    # ========================================================
+    # Cleanup
+    # ========================================================
+
+    def close(self):
+        if self._container_name:
+            subprocess.run(
+                ["docker", "rm", "-f", self._container_name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            logger.info("Removed fast container %s", self._container_name)
+            self._container_name = None
+
+
+# ============================================================
+# Convenience API
+# ============================================================
 
 def execute(
     code: str,
-    input: "Optional[Dict[str, Any]]" = None,
-    config: "Optional[Dict[str, Any]]" = None,
-) -> "Any":
-    """Convenience function for executing untrusted code.
-
-    This is a high-level wrapper around `Executor` that simplifies usage by:
-    - Accepting a raw config dictionary
-    - Returning the result directly on success
-    - Raising an exception on failure
-
-    Args:
-        code: Python code to execute.
-        input: Optional dictionary of input data passed to the code.
-        config: Optional dictionary of configuration parameters that will be
-            used to instantiate a `Config` object.
-
-    Returns:
-        Any: The result of the executed code if successful.
-
-    Raises:
-        ExecuteError: If execution fails or returns a non-"ok" status.
-    """
-    c = config if config else {}
-    cfg = Config(**c)
+    input: Optional[Dict[str, Any]] = None,
+    config: Optional[Dict[str, Any]] = None,
+) -> Any:
+    cfg = Config(**(config or {}))
     executor = Executor(cfg)
-    payload = executor.run(code, input)
+
+    try:
+        payload = executor.run(code, input)
+    finally:
+        if not cfg.fast_mode:
+            executor.close()
+
     if payload["status"] == "ok":
         return payload["result"]
+
     raise ExecuteError(payload)
+
+
+def _self_named_container(executor: Executor):
+    return ["--name", f"pybox-{uuid.uuid4()}"]
