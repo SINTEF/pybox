@@ -12,21 +12,45 @@
 > A lightweight library to run untrusted Python code
 
 
-# pybox
+# Pybox
+Pybox is a lightweight Python library for running untrusted Python code.
+It tries to offer a reasonable tradeoff between security and user-friendliness.
 
-A small Python library for running untrusted Python code.
+The untrusted code is executed in a protected Docker sandbox with (most) side-effects disabled.
+All I/O is passed as JSON via the standard input, standard output and standard error.
 
-The code is executed in a Docker sandbox with JSON I/O.
+Main features:
+- ✅ Protected Docker sandbox, offering protection against:
+    - code escape attempts
+    - fork bombs (pids_limit)
+    - memory abuse
+    - file system writes
+    - network exfiltration (if disabled)
+- ✅ Optional gVisor integration for enhanced security (highly recommended)
+- ✅ Optional fast mode with container pool (faster but less secure)
+- ✅ Provides both a Python and a FastAPI interface
 
-Pybox includes also a FastAPI service for running the untrusted code.
+
+Pybox is designed so you can switch between a safe and fast mode:
+
+| Mode           | Behavior                         | Security   | Performance |
+|----------------|----------------------------------|------------|-------------|
+| safe (default) | destroy container after each run | ⭐⭐⭐⭐⭐ | slower      |
+| fast           | reuse warm containers            | ⭐⭐⭐     | much faster |
+
 
 
 ## Install
+
+Install Pybox with
 
 ```bash
 pip install -e .
 docker build -t pybox:latest pybox/docker/
 ```
+
+Optionally, follow [these instructions](docs/install_gvisor.md) to install [gVisor] for enhanced security against kernel exploits.
+
 
 ## Running untrusted code from Python
 
