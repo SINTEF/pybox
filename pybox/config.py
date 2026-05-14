@@ -4,8 +4,8 @@ from typing import Optional
 
 class Config(BaseModel):
     image: str = Field(
-        default="pybox:latest",
-        #default="ghcr.io/sintef/pybox:latest",
+        #default="pybox:latest",
+        default="ghcr.io/sintef/pybox:latest",
         json_schema_extra={
             "description": "Container image used to execute workloads.",
             "example": "ghcr.io/sintef/pybox:latest",
