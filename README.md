@@ -25,7 +25,7 @@ Main features:
     - fork bombs (pids_limit)
     - memory abuse
     - file system writes
-    - network exfiltration (if disabled)
+    - network exfiltration (optional)
 - ✅ Optional gVisor integration for enhanced security (highly recommended)
 - ✅ Optional fast mode with container pool (faster but less secure)
 - ✅ Provides both a Python and a FastAPI interface
@@ -68,17 +68,17 @@ print(result)
 
 ```
 
-Pybox includes also a convenient run() function
+Pybox includes also a convenient execute() function
 
 ```python
-from pybox import RunError, run
+from pybox import ExecuteError, execute
 
 code = """
 import math
 result = math.hypot(x, y)
 """
 input = {"x": 3, "y": 4}
-result = run(code, input, config={"timeout": 3.0})
+result = execute(code, input, config={"timeout": 3.0})
 print(result)
 5.0
 
@@ -99,4 +99,10 @@ curl -X POST http://localhost:8000/run \
   -H "Content-Type: application/json" \
   -d '{"code": "result = x + y", "input": {"x": 2, "y": 3}}'
 
+```
+
+The return should be a JSON response:
+
+```json
+{"status": "ok", "result": 5, "errmsg": null}
 ```
