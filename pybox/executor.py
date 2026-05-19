@@ -16,8 +16,8 @@ logger = logging.getLogger("pybox.executor")
 # ============================================================
 
 class ExecuteError(Exception):
-    def __init__(self, payload: Dict[str, Any]):
-        self.__dict__.update(payload)
+    def __init__(self, response: Dict[str, Any]):
+        self.__dict__.update(response)
 
 
 # ============================================================
@@ -29,7 +29,7 @@ class Executor:
 
     def __init__(self, config: Optional[Config] = None):
         self.config = config or Config()
-        self._container_name = None
+        self._fast_container_name: Optional[str] = None
 
     # ========================================================
     # Docker command builders
@@ -82,7 +82,6 @@ class Executor:
 
     def _docker_run_cmd(self) -> list[str]:
         """Safe mode: one container per execution."""
-        print("*** run")
         return [
             "docker", "run", "--rm", "-i",
             *_self_named_container(self),
@@ -92,11 +91,11 @@ class Executor:
 
     def _start_fast_container(self):
         """Start long-lived container for fast mode."""
-        if self._container_name:
+        if self._fast_container_name:
             return
 
         name = f"pybox-fast-{uuid.uuid4()}"
-        self._container_name = name
+        self._fast_container_name = name
 
         cmd = [
             "docker", "run", "-d",
@@ -132,9 +131,8 @@ class Executor:
     def _docker_exec_cmd(self) -> list[str]:
         """Exec command for fast mode."""
         cmd = [
-            "docker", "exec",
-            "-i",
-            self._container_name,
+            "docker", "exec", "-i",
+            self._fast_container_name,
         ] + self._inspect_entrypoint()
         return cmd
 
@@ -145,12 +143,12 @@ class Executor:
 
     def _get_stats(self) -> Dict[str, Any]:
         """Fetch container resource usage (fast mode only)."""
-        if not self._container_name:
+        if not self._fast_container_name:
             return {}
 
         try:
             proc = subprocess.run(
-                ["docker", "stats", self._container_name, "--no-stream", "--format", "{{json .}}"],
+                ["docker", "stats", self._fast_container_name, "--no-stream", "--format", "{{json .}}"],
                 capture_output=True,
                 text=True,
                 timeout=2,
@@ -168,7 +166,6 @@ class Executor:
         code: str,
         input: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-
         payload = json.dumps({
             "code": code,
             "input": input or {},
@@ -201,17 +198,17 @@ class Executor:
             proc.kill()
             proc.wait()
 
-            duration = time.time() - start
+            exectime = time.time() - start
 
             return self._log_result({
                 "status": "timeout",
                 "result": None,
                 "errmsg": "Execution timed out",
                 "returncode": None,
-                "duration": duration,
+                "time": exectime,
             })
 
-        duration = time.time() - start
+        exectime = time.time() - start
 
         status = "ok" if proc.returncode == 0 else "error"
 
@@ -221,45 +218,45 @@ class Executor:
             result = None
             stderr += "\nInvalid JSON output"
 
-        payload = {
+        response = {
             "status": status,
             "result": result,
             "errmsg": stderr.strip() or None,
             "returncode": proc.returncode,
-            "duration": duration,
+            "time": exectime,
         }
 
         # Add resource stats in fast mode
         if self.config.fast_mode:
-            payload["resources"] = self._get_stats()
+            response["resources"] = self._get_stats()
 
-        return self._log_result(payload)
+        return self._log_result(response)
 
     # ========================================================
     # Logging
     # ========================================================
 
-    def _log_result(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _log_result(self, response: Dict[str, Any]) -> Dict[str, Any]:
         """Emit structured log."""
         logger.info(
             "pybox.execution",
-            extra={"execution": payload},
+            extra={"execution": response},
         )
-        return payload
+        return response
 
     # ========================================================
     # Cleanup
     # ========================================================
 
     def close(self):
-        if self._container_name:
+        if self._fast_container_name:
             subprocess.run(
-                ["docker", "rm", "-f", self._container_name],
+                ["docker", "rm", "-f", self._fast_container_name],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            logger.info("Removed fast container %s", self._container_name)
-            self._container_name = None
+            logger.info("Removed fast container %s", self._fast_container_name)
+            self._fast_container_name = None
 
 
 # ============================================================
@@ -275,15 +272,15 @@ def execute(
     executor = Executor(cfg)
 
     try:
-        payload = executor.run(code, input)
+        response = executor.run(code, input)
     finally:
         if not cfg.fast_mode:
             executor.close()
 
-    if payload["status"] == "ok":
-        return payload["result"]
+    if response["status"] == "ok":
+        return response["result"]
 
-    raise ExecuteError(payload)
+    raise ExecuteError(response)
 
 
 def _self_named_container(executor: Executor):
