@@ -64,7 +64,7 @@ code = "result = x + y"
 input = {"x": 2, "y": 3}
 result = executor.run(code, input)
 print(result)
-{'status': 'ok', 'result': 5, 'errmsg': '', 'returncode': 0}
+{'status': 'ok', 'result': 5, 'errmsg': None, 'returncode': 0}
 
 ```
 
@@ -101,7 +101,7 @@ curl -X POST http://localhost:8000/run \
 
 ```
 
-The return should be a JSON response:
+It should return a JSON response with the result:
 
 ```json
 {"status": "ok", "result": 5, "errmsg": null}
